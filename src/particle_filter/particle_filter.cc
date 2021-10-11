@@ -280,9 +280,6 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
 //described in lect 9/15
 void ParticleFilter::Predict(const Vector2f& odom_loc,
                              const float odom_angle) {
-  // A new odometry value is available (in the odom frame)
-  // propagate particles forward based on odometry.
-
   // float d = sqrt(pow(odom_loc[0],2) + pow(odom_loc[1],2));
   // float r = d / (2*sin(odom_angle));
   // float arc_dist = r * odom_angle;
