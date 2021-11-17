@@ -138,7 +138,7 @@ namespace rrt{
                 minDist = curDist;
             }
         }
-        // TODO: control, change newNode
+        // apply control, change newNode to the location after the applied control
         double curvature_inc = (car_params::max_curvature - car_params::min_curvature) / CONFIG_global_planner_curvature_num;
         double minGridDist = DBL_MAX;
         rrt::Node bestNextStep;
