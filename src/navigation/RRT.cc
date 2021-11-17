@@ -72,8 +72,10 @@ namespace rrt{
         int xSize = collision_map.GetRowNum();
         int ySize = collision_map.GetColNum();
         list<const rrt::Node *> plan;
+
         vector<rrt::Node> graph;
         unordered_set<rrt::Node, rrt::NodeHash> nodeSet;
+
         graph.push_back(start);
         nodeSet.insert(start);
         int cnt = 0;
@@ -83,8 +85,7 @@ namespace rrt{
         while(cnt < lim) {
             cnt++;
             rrt::Node newNode = CreateNewNode(xSize, ySize);
-            newNode.x = -CONFIG_map_length_dist + newNode.xIdx * CONFIG_dist_res;
-            newNode.y = -CONFIG_map_length_dist + newNode.yIdx * CONFIG_dist_res;
+            
             // CurStepOutliner(newNode, msg);
             // std::cout<<"Generated newNode x:" << newNode.x << "Generated newNode y:" << newNode.y << "\n";
             if(IsNodeCollide(collision_map, newNode)) continue;
@@ -121,6 +122,8 @@ namespace rrt{
         // int xIdx = 5;
         // int yIdx = 5;
         rrt::Node newNode(xIdx, yIdx);
+        newNode.x = -CONFIG_map_length_dist + newNode.xIdx * CONFIG_dist_res;
+        newNode.y = -CONFIG_map_length_dist + newNode.yIdx * CONFIG_dist_res;
         // newNode.x = (xIdx + 0.5) * CONFIG_dist_res;
         // newNode.y = (yIdx + 0.5) * CONFIG_dist_res;
         return newNode;
