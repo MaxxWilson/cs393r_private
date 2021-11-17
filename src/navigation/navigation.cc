@@ -33,11 +33,11 @@
 #include "visualization/visualization.h"
 #include "config_reader/config_reader.h"
 #include "navigation.h"
-
+#include "RRT.h"
 #include "obstacle_avoidance/obstacle_avoidance.h"
 #include "obstacle_avoidance/car_params.h"
 #include "visualization/CImg.h"
-
+#include <list>
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::VisualizationMsg;
@@ -45,7 +45,7 @@ using std::string;
 using std::vector;
 using cimg_library::CImg;
 using cimg_library::CImgDisplay;
-
+using std::list;
 using namespace math_util;
 using namespace ros_helpers;
 
@@ -105,7 +105,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     }
   }
 
-  collision_map_.DisplayImage(image);
+  // collision_map_.DisplayImage(image);
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -217,6 +217,17 @@ void Navigation::Run(){
     odom_state_tf.stamp = odom_stamp_;
     has_new_odom_ = false;
   }
+  // RRT
+  // list<rrt::Node*> plan;
+  rrt::Node start(robot_loc_.x(), robot_loc_.y(), robot_angle_);
+  rrt::Node end(robot_loc_.x() + 6, robot_loc_.y() + 8, robot_angle_);
+  if(rrt::RRT(collision_map_,start,end, global_viz_msg_)) {
+    std::cout<<"found"<<std::endl;
+  } else {
+    std::cout<<"not found"<<std::endl;
+  }
+  // sleep(50);
+
 
   // Find drive cmd directly before odom msg
   int cmd_start_index = std::lower_bound(vel_commands_.begin(), vel_commands_.end(), odom_state_tf.stamp) - vel_commands_.begin() - 1;
@@ -303,7 +314,7 @@ void Navigation::Run(){
   //obstacle_avoidance::VisualizeObstacleAvoidanceInfo(goal_point,path_options,best_path,local_viz_msg_);
   
   // 7) Publish commands with 1-D TOC, update vector of previous vehicle commands
-  TimeOptimalControl(best_path);
+  // TimeOptimalControl(best_path);
     
   CommandStamped drive_cmd(drive_msg_.velocity, drive_msg_.curvature, drive_msg_.header.stamp.toNSec() + car_params::actuation_latency);
   vel_commands_.push_back(drive_cmd);

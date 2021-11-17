@@ -148,8 +148,11 @@ void CostMap::SetLikelihoodAtPosition(double x, double y, double likelihood){
     if(xIdx < 0 || xIdx >= cost_map_vector.size() || yIdx < 0 || yIdx >= cost_map_vector[0].size()) throw std::out_of_range("Out of boundaries");
     cost_map_vector[xIdx][yIdx] = likelihood;
 }
-
-double CostMap::GetLikelihoodAtPosition(double x, double y, bool normalized){
+double CostMap::GetValueAtIdx(int xIdx, int yIdx) const{
+    if(xIdx < 0 || xIdx >= cost_map_vector.size() || yIdx < 0 || yIdx >= cost_map_vector[0].size()) throw std::out_of_range("Out of boundaries");
+    return cost_map_vector[xIdx][yIdx];
+}
+double CostMap::GetLikelihoodAtPosition(double x, double y, bool normalized) const{
     int xIdx = GetIndexFromDist(x);
     int yIdx = GetIndexFromDist(y);
     if(xIdx < 0 || xIdx >= cost_map_vector.size() || yIdx < 0 || yIdx >= cost_map_vector[0].size()) throw std::out_of_range("Out of boundaries");
@@ -161,13 +164,13 @@ double CostMap::GetLikelihoodAtPosition(double x, double y, bool normalized){
     }
 }
 
-int CostMap::GetIndexFromDist(double dist){
+int CostMap::GetIndexFromDist(double dist) const{
     float dist_rounded = RoundToResolution(dist, CONFIG_dist_res);
     float lower_bound = RoundToResolution(-(CONFIG_map_length_dist), CONFIG_dist_res);
     return (int) RoundToResolution((dist_rounded - lower_bound) / CONFIG_dist_res, 1.0); // integer round using CONFIG_dist_res/2
 }
 
-float CostMap::RoundToResolution(float value, float res){
+float CostMap::RoundToResolution(float value, float res) const{
     return ((float) ((int) (value/res + 0.5*math_util::Sign(value))))*res;
 }
 

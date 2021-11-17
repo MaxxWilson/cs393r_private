@@ -52,9 +52,9 @@ class CostMap{
         void UpdateCollisionMap(const std::vector<geometry::line2f> lines);
 
         void SetLikelihoodAtPosition(double x, double y, double likelihood);
-        double GetLikelihoodAtPosition(double x, double y, bool normalized = true);
-        int GetIndexFromDist(double dist);
-        float RoundToResolution(float value, float res);
+        double GetLikelihoodAtPosition(double x, double y, bool normalized = true) const;
+        int GetIndexFromDist(double dist) const;
+        float RoundToResolution(float value, float res) const;
         void ClearMap();
         inline int GetRowNum() const {
             return cost_map_vector.size();
@@ -62,9 +62,7 @@ class CostMap{
         inline int GetColNum() const {
             return cost_map_vector[0].size();
         };
-        inline double GetValueAtIdx(int xIdx, int yIdx) {
-            return cost_map_vector[xIdx][yIdx];
-        }
+        double GetValueAtIdx(int xIdx, int yIdx) const;
     private:
         vector<vector<double>> cost_map_vector;
 
