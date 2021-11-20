@@ -109,6 +109,18 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
+  nav_goal_loc_ = loc;
+  nav_goal_angle_ = angle;
+
+  // list<rrt::Node*> plan;
+  rrt::Node start(robot_loc_.x(), robot_loc_.y(), robot_angle_);
+  rrt::Node end(nav_goal_loc_.x(), nav_goal_loc_.y(), nav_goal_angle_);
+  if(rrt::RRT(collision_map_, start, end, global_viz_msg_, viz_pub_)) {
+    std::cout<<"found"<<std::endl;
+  } else {
+    std::cout<<"not found"<<std::endl;
+  }
+  // sleep(50);
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -202,7 +214,7 @@ void Navigation::Run(){
   
   // Clear previous visualizations.
   visualization::ClearVisualizationMsg(local_viz_msg_);
-  visualization::ClearVisualizationMsg(global_viz_msg_);
+  //visualization::ClearVisualizationMsg(global_viz_msg_);
 
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
@@ -217,16 +229,9 @@ void Navigation::Run(){
     odom_state_tf.stamp = odom_stamp_;
     has_new_odom_ = false;
   }
+
   // RRT
-  // list<rrt::Node*> plan;
-  rrt::Node start(robot_loc_.x(), robot_loc_.y(), robot_angle_);
-  rrt::Node end(robot_loc_.x() + 6, robot_loc_.y() + 8, robot_angle_);
-  if(rrt::RRT(collision_map_,start,end, global_viz_msg_)) {
-    std::cout<<"found"<<std::endl;
-  } else {
-    std::cout<<"not found"<<std::endl;
-  }
-  // sleep(50);
+
 
 
   // Find drive cmd directly before odom msg

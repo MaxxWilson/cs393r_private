@@ -5,6 +5,9 @@
 #include "shared/math/geometry.h"
 #include "cost_map/cost_map.h"
 #include "visualization/visualization.h"
+
+#include "ros/ros.h"
+
 using geometry::line2f;
 using std::vector;
 using std::list;
@@ -37,7 +40,7 @@ struct NodeHash {
 };
 // 
 rrt::Node CreateNewNode(int xSize, int ySize);
-int RRT(costmap::CostMap const& collision_map, Node& start, Node& end, amrl_msgs::VisualizationMsg& msg);
+int RRT(costmap::CostMap const& collision_map, Node& start, Node& end, amrl_msgs::VisualizationMsg& msg, ros::Publisher viz_pub);
 bool IsInObstacle(costmap::CostMap& collision_map, const Node& node);
 double GetGridDist(rrt::Node const& n1, rrt::Node const& n2);
 rrt::Node* FindNearestNode(costmap::CostMap const& collision_map, rrt::Node & newNode, rrt::Node const& end, vector<rrt::Node>& graph);

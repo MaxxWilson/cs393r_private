@@ -23,6 +23,7 @@ namespace rrt{
     CONFIG_FLOAT(global_planner_step_length, "global_planner_step_length");
     CONFIG_INT(global_planner_per_step_num, "global_planner_per_step_num");
     CONFIG_INT(global_planner_steps, "global_planner_steps");
+    CONFIG_FLOAT(goal_bias, "goal_bias");
     int dirs[8][2] = {
         {1, 0}, {-1, 0}, {0, 1}, {0, -1},
         // {0, 0}, {0, 0}, {0, 0}, {0, 0}    
@@ -64,7 +65,7 @@ namespace rrt{
         }
         return false;
     }
-    int RRT(costmap::CostMap const& collision_map, rrt::Node& start, rrt::Node& end, amrl_msgs::VisualizationMsg& msg) {
+    int RRT(costmap::CostMap const& collision_map, rrt::Node& start, rrt::Node& end, amrl_msgs::VisualizationMsg& msg, ros::Publisher viz_pub) {
         start.xIdx = collision_map.GetIndexFromDist(start.x);
         start.yIdx = collision_map.GetIndexFromDist(start.y);
         end.xIdx = collision_map.GetIndexFromDist(end.x);
@@ -80,15 +81,24 @@ namespace rrt{
         nodeSet.insert(start);
         int cnt = 0;
         int lim = CONFIG_global_planner_steps;
-        visualization::DrawCross(Eigen::Vector2f(start.x, start.y), 0.25,0xfc4103,msg);
-        visualization::DrawCross(Eigen::Vector2f(end.x, end.y), 0.25,0xfc4103,msg);
+        visualization::DrawCross(Eigen::Vector2f(start.x, start.y), 0.25, 0xfc4103,msg);
+        visualization::DrawCross(Eigen::Vector2f(end.x, end.y), 0.25, 0xfc4103,msg);
         while(cnt < lim) {
             cnt++;
             rrt::Node newNode = CreateNewNode(xSize, ySize);
+
+            if(cnt % (int) (CONFIG_global_planner_steps * CONFIG_goal_bias) == 0){
+                newNode = rrt::Node(end.x, end.y, end.angle);
+            }
+
+            // Clear Global Viz Message
+            visualization::ClearVisualizationMsg(msg);
             
-            // CurStepOutliner(newNode, msg);
+            // Add the newly created goal node to global viz
+            visualization::DrawCross(Eigen::Vector2f(newNode.x, newNode.y), 0.1, 0xFF0000, msg);
+
             // std::cout<<"Generated newNode x:" << newNode.x << "Generated newNode y:" << newNode.y << "\n";
-            if(IsNodeCollide(collision_map, newNode)) continue;
+            //if(IsNodeCollide(collision_map, newNode)) continue;
             rrt::Node* nearestNode = FindNearestNode(collision_map, newNode, end, graph); 
             if(nearestNode == NULL ||( (nearestNode->xIdx) == newNode.xIdx && (nearestNode->yIdx) == newNode.yIdx)) continue;
             newNode.parent = nearestNode;
@@ -98,7 +108,14 @@ namespace rrt{
                 nodeSet.insert(newNode);
             }
             
-            CurStepOutliner(newNode, msg);
+            // Debug Visualization //
+            
+            for(rrt::Node n: graph){
+                CurStepOutliner(n, msg);
+            }
+            msg.header.stamp = ros::Time::now();
+            viz_pub.publish(msg);
+
             // std::cout<<"nearestNode x:" << nearestNode->x << " nearestNode y:" << nearestNode->y << "\n";
             // std::cout<<"newNode x:" << newNode.x << " newNode y:" << newNode.y << "\n";
             /* 
@@ -146,7 +163,7 @@ namespace rrt{
             Eigen::Vector2f center = GetCenter(*nearestNode, curvature);            
             rrt::Node step_end;
             if(CheckCollision(collision_map, *nearestNode, end, center, curvature, step_end)) {
-                continue;
+                break;
             } else {
                 float curGridDist = GetDist(step_end, newNode);
                 if(curGridDist < minGridDist) {
@@ -227,7 +244,7 @@ namespace rrt{
         return curDist;
     }
     void CurStepOutliner(rrt::Node const& node, amrl_msgs::VisualizationMsg& msg) {
-        visualization::DrawCross(Eigen::Vector2f(node.x, node.y), 0.25,0x1e9aa8,msg);
+        visualization::DrawCross(Eigen::Vector2f(node.x, node.y), 0.1,0x1e9aa8,msg);
     }
     // Draw the global path
     void GlobalPathOutliner(list<rrt::Node*>& plan, amrl_msgs::VisualizationMsg& msg){
