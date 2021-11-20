@@ -15,6 +15,8 @@ using std::vector;
 using std::unordered_set;
 #include "config_reader/config_reader.h"
 #include "obstacle_avoidance/car_params.h"
+#include "obstacle_avoidance/obstacle_avoidance.h"
+#include "shared/math/math_util.h"
 
 namespace rrt{
     CONFIG_FLOAT(map_length_dist, "map_length_dist");
@@ -81,8 +83,50 @@ namespace rrt{
         nodeSet.insert(start);
         int cnt = 0;
         int lim = CONFIG_global_planner_steps;
-        visualization::DrawCross(Eigen::Vector2f(start.x, start.y), 0.25, 0xfc4103,msg);
-        visualization::DrawCross(Eigen::Vector2f(end.x, end.y), 0.25, 0xfc4103,msg);
+        visualization::DrawCross(Eigen::Vector2f(start.x, start.y), 0.25, 0x0000FF, msg);
+        //visualization::DrawCross(Eigen::Vector2f(end.x, end.y), 0.25, 0x0000FF, msg);
+
+        std::cout << "Start: " << start.x << ", " << start.y << std::endl;
+        std::cout << "End: " << end.x << ", " << end.y << std::endl;
+
+        // TESTING
+        
+        // Create node at random location
+        rrt::Node newNode = CreateNewNode(xSize, ySize);
+        
+        // Add the newly created goal node to global viz
+        visualization::DrawCross(Eigen::Vector2f(newNode.x, newNode.y), 0.5, 0x0000FF, msg);
+        std::cout << "New Node: " << newNode.x << ", " << newNode.y << std::endl;
+
+        // rrt::Node* nearestNode = FindNearestNode(collision_map, newNode, end, graph); 
+        rrt::Node* nearestNode = NULL;
+        for(rrt::Node& n: graph) {
+            double curDist = GetGridDist(newNode, n);
+            double minDist = DBL_MAX;
+            if(curDist < minDist) {
+                nearestNode = &n;
+                minDist = curDist;
+            }
+        }
+
+        Eigen::Rotation2D<float> rot2Nearest(-nearestNode->angle);
+        Eigen::Vector2f targetInBL = rot2Nearest*(Eigen::Vector2f(newNode.x, newNode.y) - Eigen::Vector2f(nearestNode->x, nearestNode->y));
+        float curvature = obstacle_avoidance::GetCurvatureFromGoalPoint(targetInBL);
+
+        visualization::DrawArc(Eigen::Vector2f(nearestNode->x, nearestNode->y) + Eigen::Rotation2D<float>(nearestNode->angle)*Eigen::Vector2f(0, 1/curvature),
+                                abs(1/curvature),
+                                3.14159 - atan2(nearestNode->y, nearestNode->x),
+                                3.14159 - atan2(newNode.y, newNode.x),
+                                0x000000,
+                                msg);
+
+        //visualization::DrawCross(Eigen::Vector2f(nearestNode->x, nearestNode->y), 0.5, 0x00FF00, msg);
+
+        msg.header.stamp = ros::Time::now();
+        viz_pub.publish(msg);
+        // TESTING
+
+        /*
         while(cnt < lim) {
             cnt++;
             rrt::Node newNode = CreateNewNode(xSize, ySize);
@@ -118,18 +162,19 @@ namespace rrt{
 
             // std::cout<<"nearestNode x:" << nearestNode->x << " nearestNode y:" << nearestNode->y << "\n";
             // std::cout<<"newNode x:" << newNode.x << " newNode y:" << newNode.y << "\n";
-            /* 
+            
             if(abs(nearestNode->angle) < 1e-5) {
                 visualization::DrawLine(Eigen::Vector2f(nearestNode->x, nearestNode->y), Eigen::Vector2f(newNode.x, newNode.y),0x1e9aa8,msg);
             } else {
                 Eigen::Vector2f center = GetCenter(*nearestNode, nearestNode->curvature);
                 visualization::DrawArc(center, 1/nearestNode->curvature, M_PI/2 + nearestNode->angle, M_PI/2 + newNode.angle,0x1e9aa8,msg);
-            }*/
+            }
             if(newNode.xIdx == end.xIdx && newNode.yIdx == end.yIdx) {
                 // ConstructPath(start, end, plan);
                 return 1;
             }
         }
+        */
         return 0;
     }
     rrt::Node CreateNewNode(int xSize, int ySize) {
@@ -145,6 +190,7 @@ namespace rrt{
         // newNode.y = (yIdx + 0.5) * CONFIG_dist_res;
         return newNode;
     }
+
     rrt::Node* FindNearestNode(costmap::CostMap const& collision_map, rrt::Node& newNode, rrt::Node const& end, vector<rrt::Node>& graph) {
         rrt::Node* nearestNode = NULL;
         double minDist = DBL_MAX;
@@ -179,6 +225,7 @@ namespace rrt{
         newNode.yIdx = collision_map.GetIndexFromDist(newNode.y);
         return nearestNode;
     }
+
     void ConstructPath(const rrt::Node& start, const rrt::Node& end, list<rrt::Node const* > plan) {
         const rrt::Node* cur = &end;
         do {
