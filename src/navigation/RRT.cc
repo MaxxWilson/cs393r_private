@@ -109,16 +109,40 @@ namespace rrt{
             }
         }
 
+        // Transform target node to frame of nearest node
         Eigen::Rotation2D<float> rot2Nearest(-nearestNode->angle);
-        Eigen::Vector2f targetInBL = rot2Nearest*(Eigen::Vector2f(newNode.x, newNode.y) - Eigen::Vector2f(nearestNode->x, nearestNode->y));
-        float curvature = obstacle_avoidance::GetCurvatureFromGoalPoint(targetInBL);
+        Eigen::Vector2f nearestNodeLoc = Eigen::Vector2f(nearestNode->x, nearestNode->y);
+        Eigen::Vector2f targetInBL = rot2Nearest*(Eigen::Vector2f(newNode.x, newNode.y) - nearestNodeLoc);
 
-        visualization::DrawArc(Eigen::Vector2f(nearestNode->x, nearestNode->y) + Eigen::Rotation2D<float>(nearestNode->angle)*Eigen::Vector2f(0, 1/curvature),
-                                abs(1/curvature),
-                                3.14159 - atan2(nearestNode->y, nearestNode->x),
-                                3.14159 - atan2(newNode.y, newNode.x),
-                                0x000000,
-                                msg);
+        // Get curvature from nearest node to target
+        float curvature = obstacle_avoidance::GetCurvatureFromGoalPoint(targetInBL);
+        float angle_to_target = atan2(targetInBL.x(), abs(1/curvature) - abs(targetInBL.y()));
+        angle_to_target = (angle_to_target < 0) ? 2*M_PI - abs(angle_to_target) : angle_to_target;
+        float curr_angle = 0;
+        float dist_res = 0.1; // s = r*theta
+        float expansion_lim = 2.0;
+
+        Eigen::Vector2f farthest_point(nearestNodeLoc);
+        while(curr_angle < angle_to_target && (farthest_point - nearestNodeLoc).norm() < expansion_lim){
+            Eigen::Vector2f newPoint = Eigen::Vector2f(sin(curr_angle)/abs(curvature), (1 - cos(curr_angle))/curvature);
+            newPoint = Eigen::Rotation2D<float>(nearestNode->angle)*(newPoint) + nearestNodeLoc;
+            if(collision_map.GetLikelihoodAtPosition(newPoint.x(), newPoint.y(), false) > 0.5){
+                break;
+            }
+            else{
+                farthest_point = newPoint;
+            }
+            visualization::DrawCross(farthest_point, 0.2, 0xFF0000, msg);
+            curr_angle += dist_res*abs(curvature);
+        }
+
+
+        // visualization::DrawArc(Eigen::Vector2f(nearestNode->x, nearestNode->y) + Eigen::Rotation2D<float>(nearestNode->angle)*Eigen::Vector2f(0, 1/curvature),
+        //                         abs(1/curvature),
+        //                         atan2(nearestNode->y, nearestNode->x),
+        //                         atan2(newNode.y, newNode.x),
+        //                         0x000000,
+        //                         msg);
 
         //visualization::DrawCross(Eigen::Vector2f(nearestNode->x, nearestNode->y), 0.5, 0x00FF00, msg);
 

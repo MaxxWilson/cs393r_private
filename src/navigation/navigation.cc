@@ -105,7 +105,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     }
   }
 
-  // collision_map_.DisplayImage(image);
+  //collision_map_.DisplayImage(image);
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
