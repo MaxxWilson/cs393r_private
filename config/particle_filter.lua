@@ -37,3 +37,11 @@ dist_short = 0.23   -- 1 std from sensor 68.2%
 dist_long = 0.28     -- 2 std from sensor 95%
 
 resample_frequency = 8     -- TODO Experimental tuning
+
+-- EKF Motion Params --
+k11 = 0.4 -- Cov(x, x)
+k12 = 0.0 -- Cov(x, y)
+k13 = 0.1 -- Cov(x, theta)
+k22 = 0.3
+k23 = 0.5
+k33 = 1.5

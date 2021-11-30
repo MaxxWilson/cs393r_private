@@ -131,6 +131,20 @@ class ParticleFilter {
 
 
   double end_time = 0;
+
+  // EKF Matrix
+  std::vector<Eigen::Matrix3f> Pk;
+  Eigen::Matrix3f Qu; // control input covariance
+  Eigen::Matrix3f Fu; // The Jacobian matrices of process model with respect to the robot states
+  Eigen::Matrix3f Qk; //  Process noise covariance
+
+  void RefineParticleBasedonLaser(Particle& p,
+                                  const std::vector<float>& ranges,
+                                  float range_min,
+                                  float range_max,
+                                  float angle_min,
+                                  float angle_max,
+                                  int particleIdx);
 };
 }  // namespace slam
 

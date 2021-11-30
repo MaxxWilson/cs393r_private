@@ -58,6 +58,13 @@ CONFIG_FLOAT(k4, "k4");
 CONFIG_FLOAT(k5, "k5");
 CONFIG_FLOAT(k6, "k6");
 
+CONFIG_FLOAT(k11, "k11");
+CONFIG_FLOAT(k12, "k12");
+CONFIG_FLOAT(k13, "k13");
+CONFIG_FLOAT(k22, "k22");
+CONFIG_FLOAT(k23, "k23");
+CONFIG_FLOAT(k33, "k33");
+
 CONFIG_FLOAT(laser_offset, "laser_offset");
 
 CONFIG_FLOAT(min_update_dist, "min_update_dist");
@@ -278,6 +285,51 @@ void ParticleFilter::SetParticlesForTesting(vector<Particle> new_particles){
   particles_ = new_particles;
 }
 
+void ParticleFilter::RefineParticleBasedonLaser(Particle& particle,
+                                                const vector<float>& ranges,
+                                                float range_min,
+                                                float range_max,
+                                                float angle_min,
+                                                float angle_max,
+                                                int particleIdx) {
+  vector<Vector2f> predicted_cloud; // map frame
+  Particle refinedParticle(particle);
+  Eigen::Matrix3f Pki(Pk[particleIdx]);
+  GetPredictedPointCloud(particle.loc, 
+                         particle.angle, 
+                         ranges.size(), 
+                         range_min, 
+                         range_max,
+                         angle_min,
+                         angle_max,
+                         &predicted_cloud);
+  Vector2f sensor_loc = BaseLinkToSensorFrame(particle.loc, particle.angle);
+  // resize the ranges
+  vector<float> trimmed_ranges(predicted_cloud.size());
+  particle.weight = 0;
+  static Eigen::Matrix3Xf Kk(3,2);
+  static Eigen::Matrix3Xf Hk(2,3);
+  static Eigen::Matrix3Xf HkT(3,2);
+  static Eigen::Matrix3Xf Rk(3,2);
+  // Calculate the particle weight
+  for(std::size_t i = 0; i < predicted_cloud.size(); i++) {
+    double predicted_range = (predicted_cloud[i] - sensor_loc).norm();
+    Hk << (predicted_cloud[i].x() - particle.loc.x())/(predicted_range), (predicted_cloud[i].y() - particle.loc.y())/(predicted_range), 0,
+          (predicted_cloud[i].y() - particle.loc.y())/(predicted_range), (predicted_cloud[i].x() - particle.loc.x())/(predicted_range), 1;
+    HkT = Hk.transpose();
+    Kk = Pk[particleIdx]*HkT*(Hk*Pk[particleIdx]*HkT) + Rk;
+    trimmed_ranges[i] = ranges[i * CONFIG_resize_factor];
+    double diff = GetRobustObservationLikelihood(trimmed_ranges[i], predicted_range, CONFIG_dist_short, CONFIG_dist_long);
+    Vector2f diffV = {diff, 0};
+    Eigen::Vector3f deltaS = Kk * diffV;
+    refinedParticle.loc.x() = refinedParticle.loc.x() + deltaS.x();
+    refinedParticle.loc.y() = refinedParticle.loc.y() + deltaS.y();
+    refinedParticle.angle = refinedParticle.angle + deltaS.z();
+    Pki = Pki - Kk * Hk * Pk[particleIdx];
+  } 
+  Pk[particleIdx] = Pki;
+  particle = refinedParticle;
+}
 void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float range_min,
                                   float range_max,
@@ -299,11 +351,14 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
     double particle_update_start = GetMonotonicTime();
     double p_update_start = 0;
     double p_update_diff_avg = 0;
+    int idx = 0;
     for(Particle &p: particles_){
       p_update_start = GetMonotonicTime();
+      // RefineParticleBasedonLaser(p, ranges, range_min, range_max, angle_min, angle_max, idx);
       Update(ranges, range_min, range_max, angle_min, angle_max, &p);
       max_weight_log_ = std::max(max_weight_log_, p.weight);
       p_update_diff_avg += 1000000*(GetMonotonicTime() - p_update_start);
+      idx++;
     }
     double particle_update_diff = 1000*(GetMonotonicTime() - particle_update_start);
     p_update_diff_avg /= particles_.size();
@@ -344,9 +399,22 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // Change in translation and angle from odometry
   Eigen::Vector2f delta_translation = rot_odom1_to_bl1 * (odom_loc - prev_odom_loc_);
   float delta_angle = math_util::AngleDiff(odom_angle, prev_odom_angle_);
-
+  // static Eigen::Matrix3Xf Rk; // 3 * 2
+  Fu << 1, 0, -delta_translation*sin(prev_odom_angle_),
+        0, 1,  delta_translation*cos(prev_odom_angle_),
+        0, 0, 1;
+  Qk = Fu * Qu * Fu.transpose();
+  int idx = 0;
   for(Particle &particle: particles_){
-    // Get noisy angle
+    double deltas = delta_translation.norm();
+    Eigen::Matrix3Xf Fki(3, 2);
+    Fki << 1, 0, -deltas*sin(particle.angle + delta_angle/2),
+          0, 1, deltas*cos(particle.angle + delta_angle/2),
+          0, 0, 1;
+    
+    Pk[idx] = Fki * Pk[idx] * Fki.transpose() + Qk; // Pk|k-1
+    // Todo: Calculate Kalman gain
+    
     float sigma_tht = CONFIG_k5 * delta_translation.norm() + CONFIG_k6 * abs(delta_angle);
     float noisy_angle = delta_angle + rng_.Gaussian(0.0, sigma_tht);
 
@@ -361,8 +429,11 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
     
     // Transform noise to map using current particle angle
     auto rot_bl1_to_map = Eigen::Rotation2D<float>(particle.angle).toRotationMatrix();
-    particle.loc += rot_bl1_to_map * noisy_translation;   
-    particle.angle += noisy_angle;        
+    // particle.loc += rot_bl1_to_map * noisy_translation;   
+    // particle.angle += noisy_angle;    
+    particle.loc += rot_bl1_to_map * delta_translation;   // xk|k-1
+    particle.angle += delta_angle;    
+    idx++;    
   }
 
   // Update previous odometry
@@ -382,7 +453,10 @@ void ParticleFilter::Initialize(const string& map_file,
   // was received from the log.
 
   particles_.resize(CONFIG_num_particles);
-
+  Pk.resize(CONFIG_num_particles);
+  Qu << CONFIG_k11, CONFIG_k12, CONFIG_k13,
+        CONFIG_k12, CONFIG_k22, CONFIG_k23,
+        CONFIG_k13, CONFIG_k23, CONFIG_k33;
   for(Particle &particle: particles_){
     particle.loc = Eigen::Vector2f(
       loc[0] + rng_.Gaussian(0, CONFIG_init_x_sigma),
