@@ -308,7 +308,7 @@ void ParticleFilter::RefineParticleBasedonLaser(Particle& particle,
   vector<float> trimmed_ranges(predicted_cloud.size());
   particle.weight = 0;
   static Eigen::Matrix3Xf Kk(3,2);
-  static Eigen::Matrix3Xf Hk(2,3);
+  static Eigen::Matrix2Xf Hk(2,3);
   static Eigen::Matrix3Xf HkT(3,2);
   static Eigen::Matrix3Xf Rk(3,2);
   // Calculate the particle weight
@@ -400,13 +400,14 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   Eigen::Vector2f delta_translation = rot_odom1_to_bl1 * (odom_loc - prev_odom_loc_);
   float delta_angle = math_util::AngleDiff(odom_angle, prev_odom_angle_);
   // static Eigen::Matrix3Xf Rk; // 3 * 2
-  Fu << 1, 0, -delta_translation*sin(prev_odom_angle_),
-        0, 1,  delta_translation*cos(prev_odom_angle_),
+  double deltas = delta_translation.norm();
+  Fu << 1, 0, -deltas*sin(prev_odom_angle_),
+        0, 1,  deltas*cos(prev_odom_angle_),
         0, 0, 1;
   Qk = Fu * Qu * Fu.transpose();
   int idx = 0;
   for(Particle &particle: particles_){
-    double deltas = delta_translation.norm();
+    
     Eigen::Matrix3Xf Fki(3, 2);
     Fki << 1, 0, -deltas*sin(particle.angle + delta_angle/2),
           0, 1, deltas*cos(particle.angle + delta_angle/2),
