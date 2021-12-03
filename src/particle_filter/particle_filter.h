@@ -21,7 +21,7 @@
 
 #include <algorithm>
 #include <vector>
-
+#include <unordered_map>
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "shared/math/line2d.h"
@@ -38,6 +38,28 @@ struct Particle {
   Eigen::Vector2f loc;
   float angle;
   double weight;
+};
+
+
+class Landmark {
+public:
+  int id;
+  Eigen::Vector2f loc;
+  Landmark() {}
+  Landmark(int id, Eigen::Vector2f loc): id(id), loc(loc) {}
+  bool operator==(const Landmark &other) const
+  { 
+    return ((loc.x() == other.loc.x() && loc.y() == other.loc.y())
+             || id == other.id);
+  }
+};
+struct LandmarkHash
+{
+  std::size_t operator()(const Landmark& k) const
+  {
+    using std::hash;
+    return (hash<int>()(k.id));
+  }
 };
 
 class ParticleFilter {
@@ -131,6 +153,23 @@ class ParticleFilter {
 
 
   double end_time = 0;
+  // EKF
+  std::unordered_map<int, Landmark> landmarks;
+  std::unordered_map<int, Eigen::Matrix2Xf> Prl; // 3 * 2, Plr 2 * 3
+  std::unordered_map<int, std::unordered_map<int, Eigen::Matrix2Xf>> Pll; // 2 * 2
+  Eigen::Matrix3f Prr;
+  void UpdatePllPrl(const Eigen::MatrixXf& K, const Eigen::MatrixXf& Z);
+  // TODO:
+  void DetectLandmark(const Eigen::Vector2f& loc,
+                      const float angle,
+                      const std::vector<float>& ranges,
+                      float range_min,
+                      float range_max,
+                      float angle_min,
+                      float angle_max,
+                      std::vector<int>& observed_ids, // previous observed landmark ids
+                      std::vector<Eigen::Vector2f>& landmark_locs,
+                      std::vector<Eigen::Vector2f>& zbar);
 };
 }  // namespace slam
 

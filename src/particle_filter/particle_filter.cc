@@ -278,6 +278,29 @@ void ParticleFilter::SetParticlesForTesting(vector<Particle> new_particles){
   particles_ = new_particles;
 }
 
+// TODO
+void ParticleFilter::DetectLandmark(const Eigen::Vector2f& loc,
+                      const float angle,
+                      const vector<float>& ranges,
+                      float range_min,
+                      float range_max,
+                      float angle_min,
+                      float angle_max,
+                      std::vector<int>& observed_ids, // previous observed landmark ids
+                      std::vector<Eigen::Vector2f>& landmark_locs,
+                      std::vector<Eigen::Vector2f>& zbar) {
+  
+}
+void ParticleFilter::UpdatePllPrl(const Eigen::MatrixXf& K, const Eigen::MatrixXf& Z) {
+  Eigen::MatrixXf KZKT(K * Z * K.transpose());
+  Prr -= KZKT.block(0, 0, 3, 3);
+  for(int j = 0; j < landmarks.size(); j++) {
+    Prl[j] = Prl[j] - KZKT.block(0, 3 + 2 * j, 3, 2);
+    for(int i = 0; i < landmarks.size(); i++) {
+      Pll[i][j] -= KZKT.block(3 + 2 * i, 3 + 2 * j, 2, 2);
+    }
+  }
+}
 void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float range_min,
                                   float range_max,
@@ -288,7 +311,6 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   double delta_translation = (last_update_loc_ - prev_odom_loc_).norm();
   double delta_angle = math_util::AngleDiff(last_update_angle_, prev_odom_angle_);
   if(delta_translation > CONFIG_min_update_dist || std::abs(delta_angle) > CONFIG_min_update_angle){
-    static int i = 0;
     double start_time = GetMonotonicTime();
     max_weight_log_ = -1e10; // Should be smaller than any
     weight_sum_ = 0;
@@ -301,6 +323,64 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
     //double p_update_diff_avg = 0;
     for(Particle &p: particles_){
       //p_update_start = GetMonotonicTime();
+      std::vector<int> observed_ids;
+      std::vector<Eigen::Vector2f> zbar; 
+      std::vector<Eigen::Vector2f> landmark_locs;
+      DetectLandmark(p.loc, p.angle, ranges, range_min, range_max, angle_min, angle_max, observed_ids, landmark_locs, zbar);
+      for(int i = 0; i < observed_ids.size(); i++) {
+        int lid = observed_ids[i];
+        Eigen::Matrix2Xf H(2, 5);
+        Eigen::Matrix2Xf HR(2, 3);
+        Eigen::Matrix2f HLi;
+        Eigen::Matrix2f Z;
+        Eigen::Matrix2f Z_1;
+        Eigen::Matrix2f T;
+        Eigen::MatrixXf incompletePLi(5, 5);
+        Eigen::MatrixXf completePLi(3 + landmarks.size() * 2, 5);
+        Eigen::MatrixXf Pmr(landmarks.size() * 2, 3);
+        Eigen::MatrixXf Pmli(landmarks.size() * 2, 2);
+        Eigen::MatrixXf K(3 + landmarks.size() * 2, 2);
+        double item1 = (landmark_locs[i].x() - p.loc.x())/(landmark_locs[i] - p.loc).norm();
+        double item2 = (landmark_locs[i].y() - p.loc.y())/(landmark_locs[i] - p.loc).norm();
+        HR << item1, item2, 0,
+              item2, item1, 1;
+        HLi << -item1, -item2,
+               -item2, -item1;
+        H << HR, HLi;
+        incompletePLi << Prr, Prl[lid], 
+                         Prl[lid].transpose(), Pll[lid][lid];
+        // TODO: R
+        Z = H * incompletePLi * H.transpose() + /*R*/;
+        Z_1 = Z.inverse();
+        /*
+          Calculate K =
+          [Prr, PrLi]  * [HrT] * Z-1
+          [Pmr, Pmli]    [HLiT]
+        */
+
+        for(int j = 0; j < landmarks.size(); j++) {
+          Pmr.block(3 + j * 2, 0, 2, 3) = Prl[lid].transpose();
+          Pmli.block(3 + j * 2, 0, 2, 2) = Pll[j][lid];
+        }
+        completePLi << Prr, Prl[lid],
+                       Pmr, Pmli;
+        K = completePLi * H.transpose() * Z_1;
+        
+        Eigen::MatrixXf Kzbar(3 + landmarks.size() * 2, 1);
+        Kzbar = K * zbar[i];
+
+        // Update particle
+        p.loc = p.loc + Eigen::Vector2f(Kzbar.coeff(0, 0), Kzbar.coeff(1, 0));
+        p.angle = p.angle + Kzbar.coeff(2, 0);
+        // Update landmark
+        for(int j = 0; j < landmarks.size(); j++) {
+          landmarks[j].loc = landmarks[j].loc + Eigen::Vector2f(Kzbar.coeff(3 + j * 2, 0), Kzbar.coeff(3 + j * 2 + 1, 0));
+        }
+        // Update P
+        UpdatePllPrl(K, Z);
+        
+      }
+      // 
       Update(ranges, range_min, range_max, angle_min, angle_max, &p);
       max_weight_log_ = std::max(max_weight_log_, p.weight);
       //p_update_diff_avg += 1000000*(GetMonotonicTime() - p_update_start);
@@ -346,7 +426,7 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // Change in translation and angle from odometry
   Eigen::Vector2f delta_translation = rot_odom1_to_bl1 * (odom_loc - prev_odom_loc_);
   float delta_angle = math_util::AngleDiff(odom_angle, prev_odom_angle_);
-
+  
   for(Particle &particle: particles_){
     // Get noisy angle
     float sigma_tht = CONFIG_k5 * delta_translation.norm() + CONFIG_k6 * abs(delta_angle);
@@ -356,11 +436,9 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
     float sigma_x = CONFIG_k1 * delta_translation.norm() + CONFIG_k2 * abs(delta_angle);;
     float sigma_y = CONFIG_k3 * delta_translation.norm() + CONFIG_k4 * abs(delta_angle);
     Eigen::Vector2f e_xy = Eigen::Vector2f((float) rng_.Gaussian(0.0, sigma_x),(float) rng_.Gaussian(0.0, sigma_y));
-
     // Transform noise to Base Link 1 using estimated angle to get noisy translation
     auto rot_b2_to_b1 = Eigen::Rotation2D<float>(delta_angle).toRotationMatrix();
     Eigen::Vector2f noisy_translation = delta_translation + rot_b2_to_b1 * e_xy; // in previous base_link
-    
     // Transform noise to map using current particle angle
     auto rot_bl1_to_map = Eigen::Rotation2D<float>(particle.angle).toRotationMatrix();
     particle.loc += rot_bl1_to_map * noisy_translation;   
