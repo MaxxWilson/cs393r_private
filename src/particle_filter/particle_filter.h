@@ -79,6 +79,8 @@ class ParticleFilter {
   void Resample();
 
   void LowVarianceResample();
+  
+  void ParticleFilter::UpdateEKF(const Vector2f& odom_loc, const float odom_angle);
 
   void SortMap();
   static bool horizontal_line_compare(const geometry::line2f l1, const geometry::line2f l2);

@@ -335,6 +335,10 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   }                     
 }
 
+void ParticleFilter::UpdateEKF(const Vector2f& odom_loc, const float odom_angle){
+  
+}
+
 void ParticleFilter::Predict(const Vector2f& odom_loc,
                              const float odom_angle) {
   // A new odometry value is available (in the odom frame)
