@@ -335,8 +335,62 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   }                     
 }
 
-void ParticleFilter::UpdateEKF(const Vector2f& odom_loc, const float odom_angle){
-  
+/**
+ * @brief Updates EKF distribution when there is new LIDAR/Odometry data 
+ * Distribution generated is of transforms from previous location to next predicted location
+ * Particles in PF then sample transforms from combined EKF and PF motion model distributions
+ * Odometry and Lidar distrbutions are fused during has_new_lidar block
+ * 
+ * @param odom_loc 
+ * @param odom_angle 
+ * @param R - Sensor Uncertainty Matrix - provided by CSM, is LIDAR Covariance
+ * @param has_new_odom - true if Predict step of PF has new odometry
+ * @param has_new_lidar - true if Update step of PF has new lidar scan
+ * @param sigma_x - std of x distribution calculated in Predict step of PF
+ * @param sigma_y - std of y distribution calculated in Predict step of PF
+ * @param sigma_tht - std of angle distrbution calculated in Predict step of PF
+ * @param ur - Vector3f of mean of sensor distribution
+ */
+void ParticleFilter::UpdateEKF(const Vector2f& odom_loc, const float odom_angle,
+                               bool has_new_odom, bool has_new_lidar,
+                               Eigen::Matrix3f R, Eigen::Vector3f ur, float sigma_x, float sigma_y, float sigma_tht){
+  //Uncertainty Matrix from Environment - updates when there is new odometry 
+  Eigen::Matrix3f Q;
+
+  //mean of odometry transform distribution 
+  Eigen::Vector3f uq;
+
+  if(has_new_odom){
+    //sigma_x, sigma_y, sigma_tht are passed from predict
+    Q <<    sigma_x,       0,        0,
+            0      , sigma_y,        0,
+            0      ,       0, sigma_tht;
+    
+ 
+    uq << odom_loc(0) - prev_odom_loc_(0),
+          odom_loc(1) - prev_odom_loc_(1),
+          odom_angle - prev_odom_angle_;
+  }
+
+ else if(has_new_lidar){
+        Q << sigma_x,       0,        0,
+            0      , sigma_y,        0,
+            0      ,       0, sigma_tht;
+
+        uq << odom_loc(0),
+        odom_loc(1),
+        odom_angle;
+
+        //Kalman Gain K 
+        Eigen::Matrix3f K = Q * (Q + R).inverse();
+
+        //New mean of combined Predicted state and Sensor state distributions
+        //ur is mean of predicted distribution uq is mean of sensor distribution
+        Eigen::Vector3f ut = particle.loc + K * (ur - uq);
+
+        //New COV of combined Predicted state and Sensor state distributions
+        Eigen::Vector3f sigma_t =  Q - K * Q;
+  }
 }
 
 void ParticleFilter::Predict(const Vector2f& odom_loc,
@@ -351,14 +405,17 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   Eigen::Vector2f delta_translation = rot_odom1_to_bl1 * (odom_loc - prev_odom_loc_);
   float delta_angle = math_util::AngleDiff(odom_angle, prev_odom_angle_);
 
-  for(Particle &particle: particles_){
-    // Get noisy angle
-    float sigma_tht = CONFIG_k5 * delta_translation.norm() + CONFIG_k6 * abs(delta_angle);
-    float noisy_angle = delta_angle + rng_.Gaussian(0.0, sigma_tht);
+  // Get noisy angle
+  float sigma_tht = CONFIG_k5 * delta_translation.norm() + CONFIG_k6 * abs(delta_angle);
+  float noisy_angle = delta_angle + rng_.Gaussian(0.0, sigma_tht);
 
-    // Get translation noise in Base Link 2
-    float sigma_x = CONFIG_k1 * delta_translation.norm() + CONFIG_k2 * abs(delta_angle);;
-    float sigma_y = CONFIG_k3 * delta_translation.norm() + CONFIG_k4 * abs(delta_angle);
+  // Get translation noise in Base Link 2
+  float sigma_x = CONFIG_k1 * delta_translation.norm() + CONFIG_k2 * abs(delta_angle);
+  float sigma_y = CONFIG_k3 * delta_translation.norm() + CONFIG_k4 * abs(delta_angle);
+
+  UpdateEKF(odom_loc, odom_angle)
+
+  for(Particle &particle: particles_){
     Eigen::Vector2f e_xy = Eigen::Vector2f((float) rng_.Gaussian(0.0, sigma_x),(float) rng_.Gaussian(0.0, sigma_y));
 
     // Transform noise to Base Link 1 using estimated angle to get noisy translation
