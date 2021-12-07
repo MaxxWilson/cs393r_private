@@ -362,34 +362,37 @@ void ParticleFilter::UpdateEKF(const Vector2f& odom_loc, const float odom_angle,
 
   if(has_new_odom){
     //sigma_x, sigma_y, sigma_tht are passed from predict
-    Q <<    sigma_x,       0,        0,
-            0      , sigma_y,        0,
-            0      ,       0, sigma_tht;
+    Q <<    math_util::Pow(sigma_x, 2),                          0,                            0,
+            0                         , math_util::Pow(sigma_y, 2),                            0,
+            0                         ,                          0, math_util::Pow(sigma_tht, 2);
     
- 
-    uq << odom_loc(0) - prev_odom_loc_(0),
+    //summing next odometry data
+    Eigen::Vector3f temp;
+    temp << odom_loc(0) - prev_odom_loc_(0),
           odom_loc(1) - prev_odom_loc_(1),
           odom_angle - prev_odom_angle_;
+    uq += temp;
   }
 
  else if(has_new_lidar){
-        Q << sigma_x,       0,        0,
-            0      , sigma_y,        0,
-            0      ,       0, sigma_tht;
+    Q <<    math_util::Pow(sigma_x, 2),                          0,                            0,
+            0                         , math_util::Pow(sigma_y, 2),                            0,
+            0                         ,                          0, math_util::Pow(sigma_tht, 2);
 
-        uq << odom_loc(0),
-        odom_loc(1),
-        odom_angle;
+    //clearing odometry data 
+    uq << odom_loc(0) - prev_odom_loc_(0),
+          odom_loc(1) - prev_odom_loc_(1),
+          odom_angle - prev_odom_angle_;
 
-        //Kalman Gain K 
-        Eigen::Matrix3f K = Q * (Q + R).inverse();
+    //Kalman Gain K 
+    Eigen::Matrix3f K = Q * (Q + R).inverse();
 
-        //New mean of combined Predicted state and Sensor state distributions
-        //ur is mean of predicted distribution uq is mean of sensor distribution
-        Eigen::Vector3f ut = particle.loc + K * (ur - uq);
+    //New mean of combined Predicted state and Sensor state distributions
+    //ur is mean of predicted distribution uq is mean of sensor distribution
+    Eigen::Vector3f ut = uq + K * (ur - uq);
 
-        //New COV of combined Predicted state and Sensor state distributions
-        Eigen::Vector3f sigma_t =  Q - K * Q;
+    //New COV of combined Predicted state and Sensor state distributions
+    Eigen::Vector3f sigma_t =  Q - K * Q;
   }
 }
 
