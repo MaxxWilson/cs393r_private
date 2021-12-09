@@ -416,8 +416,6 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   float sigma_x = CONFIG_k1 * delta_translation.norm() + CONFIG_k2 * abs(delta_angle);
   float sigma_y = CONFIG_k3 * delta_translation.norm() + CONFIG_k4 * abs(delta_angle);
 
-  UpdateEKF(odom_loc, odom_angle)
-
   for(Particle &particle: particles_){
     Eigen::Vector2f e_xy = Eigen::Vector2f((float) rng_.Gaussian(0.0, sigma_x),(float) rng_.Gaussian(0.0, sigma_y));
 
